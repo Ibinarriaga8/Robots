@@ -8,7 +8,7 @@ from rclpy.qos import (
 )
 
 import message_filters
-from amr_msgs.msg import PoseStamped
+from amr_msgs.msg import PoseStamped, MoveFlag
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import LaserScan
@@ -26,6 +26,7 @@ class WallFollowerNode(LifecycleNode):
         # Parameters
         self.declare_parameter("dt", 0.05)
         self.declare_parameter("enable_localization", False)
+        self._stop = False
 
     def on_configure(self, state: LifecycleState) -> TransitionCallbackReturn:
         """Handles a configuring transition.
@@ -54,6 +55,9 @@ class WallFollowerNode(LifecycleNode):
 
             self._subscribers: list[message_filters.Subscriber] = []
 
+            #Aqui añadimos el suscriptor de MoveFLag para parar el robot
+            self._stop_subscriber = self.create_subscription(MoveFlag, "/move", qos_profile=10, callback=self._stop_callback)
+
             # Append as many topics as needed
             self._subscribers.append(
                 message_filters.Subscriber(self, Odometry, "/odometry")
@@ -69,10 +73,13 @@ class WallFollowerNode(LifecycleNode):
 
             ts.registerCallback(self._compute_commands_callback)
 
+
             # TODO: 4.12. Add /pose to the synced subscriptions only if localization is enabled.
+            
+
 
             # Publishers
-            # TODO: 2.10. Create the /cmd_vel velocity commands publisher (TwistStamped message).
+            # 2.10. Create the /cmd_vel velocity commands publisher (TwistStamped message).
 
             self._cmd_publisher = self.create_publisher(Twist, "/cmd_vel", 10)
 
@@ -114,16 +121,22 @@ class WallFollowerNode(LifecycleNode):
         """
         self.get_logger().info("Received messages.")
         if not pose_msg.localized:
-            # TODO: 2.8. Parse the odometry from the Odometry message (i.e., read z_v and z_w).
-            z_v: float = odom_msg.twist.twist.linear.x
-            z_w: float = odom_msg.twist.twist.angular.z
+            print(self._stop)
+            
+            if not self._stop:
+                # 2.8. Parse the odometry from the Odometry message (i.e., read z_v and z_w).
+                z_v: float = odom_msg.twist.twist.linear.x
+                z_w: float = odom_msg.twist.twist.angular.z
 
-            # TODO: 2.9. Parse LiDAR measurements from the LaserScan message (i.e., read z_scan).
-            z_scan: list[float] = scan_msg.ranges
+                # TODO: 2.9. Parse LiDAR measurements from the LaserScan message (i.e., read z_scan).
+                z_scan: list[float] = scan_msg.ranges
 
-            # Execute wall follower
-            v, w = self._wall_follower.compute_commands(z_scan, z_v, z_w)
-            self.get_logger().info(f"Commands: v = {v:.3f} m/s, w = {w:+.3f} rad/s")
+                # Execute wall follower
+                v, w = self._wall_follower.compute_commands(z_scan, z_v, z_w)
+                self.get_logger().info(f"Commands: v = {v:.3f} m/s, w = {w:+.3f} rad/s")
+            else:
+                print("ME VOY A PARAR")
+                v, w = 0.0, 0.0
 
             # Publish
             self._publish_velocity_commands(v, w)
@@ -143,6 +156,9 @@ class WallFollowerNode(LifecycleNode):
         msg.linear.x = v
         msg.angular.z = 1.0* w
         self._cmd_publisher.publish(msg)
+
+    def _stop_callback(self, msg: MoveFlag) -> None:    
+        self._stop = not msg.move
 
 
 def main(args=None):
