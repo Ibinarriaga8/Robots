@@ -9,7 +9,8 @@ __pycache__/
 .vscode/
 
 #Folder
-images/
+amr_localization/images/
+amr_planning/images/
 
 # Ignorar imágenes
 *.jpg

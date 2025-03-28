@@ -46,7 +46,7 @@ class PurePursuitNode(LifecycleNode):
             )
             self._subscriber_path = self.create_subscription(Path, "path", self._path_callback, 10)
 
-            self._stop_subscriber = self.create_subscription(MoveFlag, "/stop", qos_profile=10, callback=self._stop_callback)
+            self._stop_subscriber = self.create_subscription(MoveFlag, "move", qos_profile=10, callback=self._stop_callback)
 
             # Publishers
             self._publisher = self.create_publisher(Twist, "cmd_vel", 10)
@@ -83,8 +83,6 @@ class PurePursuitNode(LifecycleNode):
         self.last_pose_msg = pose_msg
         if pose_msg.localized:
             if self.path_recieved and not self._stop:
-
-                self.get_logger().info(f"Received messages: {pose_msg}")
                 # Parse pose
                 x = pose_msg.pose.position.x
                 y = pose_msg.pose.position.y
@@ -140,6 +138,7 @@ class PurePursuitNode(LifecycleNode):
 
     def _stop_callback(self, msg: MoveFlag) -> None:    
         self._stop = not msg.move
+        self.get_logger().info("PARAMRME")
 
         if self._stop:
             self._publish_velocity_commands(v=0.0, w=0.0)
