@@ -58,6 +58,7 @@ class WallFollowerNode(LifecycleNode):
             #Aqui añadimos el suscriptor de MoveFLag para parar el robot
             self._stop_subscriber = self.create_subscription(MoveFlag, "/move", qos_profile=10, callback=self._stop_callback)
 
+
             # Append as many topics as needed
             self._subscribers.append(
                 message_filters.Subscriber(self, Odometry, "/odometry")
@@ -76,6 +77,7 @@ class WallFollowerNode(LifecycleNode):
 
             # TODO: 4.12. Add /pose to the synced subscriptions only if localization is enabled.
             
+
 
 
             # Publishers
@@ -121,8 +123,7 @@ class WallFollowerNode(LifecycleNode):
         """
         self.get_logger().info("Received messages.")
         if not pose_msg.localized:
-            print(self._stop)
-            
+
             if not self._stop:
                 # 2.8. Parse the odometry from the Odometry message (i.e., read z_v and z_w).
                 z_v: float = odom_msg.twist.twist.linear.x
@@ -135,7 +136,7 @@ class WallFollowerNode(LifecycleNode):
                 v, w = self._wall_follower.compute_commands(z_scan, z_v, z_w)
                 self.get_logger().info(f"Commands: v = {v:.3f} m/s, w = {w:+.3f} rad/s")
             else:
-                print("ME VOY A PARAR")
+                
                 v, w = 0.0, 0.0
 
             # Publish

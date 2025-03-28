@@ -40,6 +40,7 @@ class ParticleFilterNode(LifecycleNode):
         self._last_y = None
         self._last_theta = None
 
+
     def on_configure(self, state: LifecycleState) -> TransitionCallbackReturn:
         """Handles a configuring transition.
 
@@ -162,6 +163,7 @@ class ParticleFilterNode(LifecycleNode):
             msg.move = not self._stop
             self._move_publihser.publish(msg)            
             time.sleep(2.5)
+
             
             for z_v, z_w in self._odometry_measures:
                 self._execute_motion_step(z_v, z_w)
@@ -271,6 +273,7 @@ class ParticleFilterNode(LifecycleNode):
             pose_msg.pose.position.z = 0.0
             
             qw, qx, qy, qz = euler2quat(0, 0, theta_h)
+
             pose_msg.pose.orientation.x = qx
             pose_msg.pose.orientation.y = qy
             pose_msg.pose.orientation.z = qz
