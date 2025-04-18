@@ -56,9 +56,10 @@ class OdometryNode(LifecycleNode):
                 dx = position.x - self.prev_position.x
                 dy = position.y - self.prev_position.y
 
-                linear_velocity = math.sqrt(dx**2 + dy**2) / dt
-                angular_velocity = (theta - self.prev_theta) / dt
+                z_v = math.sqrt(dx**2 + dy**2) / dt
+                z_w = (theta - self.prev_theta) / dt
 
+                # Publish Odometry with computed estimated z_v and z_w based on recieved /odom Pose.
                 odom_msg = Odometry()
                 odom_msg.header.stamp = current_time.to_msg()
                 odom_msg.header.frame_id = "odom"
@@ -69,11 +70,12 @@ class OdometryNode(LifecycleNode):
                 odom_msg.pose.pose.position.z = 0.0
                 odom_msg.pose.pose.orientation = orientation
 
-                odom_msg.twist.twist.linear.x = linear_velocity
-                odom_msg.twist.twist.angular.z = angular_velocity
+                odom_msg.twist.twist.linear.x = z_v
+                odom_msg.twist.twist.angular.z = z_w
 
                 self._odom_publisher.publish(odom_msg)
 
+        # Registar last position estimates in order to compute derivatives to estimate velocities
         self.prev_time = current_time
         self.prev_position = position
         self.prev_theta = theta
