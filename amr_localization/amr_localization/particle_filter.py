@@ -89,7 +89,7 @@ class ParticleFilter:
         particle_positions = np.array([[p[0], p[1], math.cos(p[2]), math.sin(p[2])] for p in self._particles])
 
         # Perform DBSCAN clustering
-        clustering = DBSCAN(eps=0.2, min_samples=25)
+        clustering = DBSCAN(eps=0.2, min_samples=10)
         labels = clustering.fit_predict(particle_positions)
 
         cluster_labels = set(labels)
@@ -132,19 +132,18 @@ class ParticleFilter:
         for i, particle in enumerate(self._particles):
 
             x, y, theta = particle
-            # Ruido en la velocidad lineal (v) y angular (w)
-            noise_v = np.random.normal(0, self._sigma_v)  # Ruido en la velocidad lineal
-            noise_w = np.random.normal(0, self._sigma_w)  # Ruido en la velocidad angular
+            # Noise in linear velocity (v) and angular velocity (w)
+            noise_v = np.random.normal(0, self._sigma_v)  # Noise in linear velocity
+            noise_w = np.random.normal(0, self._sigma_w)  # Noise in angular velocity
 
-            # Velocidades con ruido
-            v_noisy = max(0, v + noise_v)  # Evita movimientos hacia atrás
+            # Velocities with noise
+            v_noisy = max(0, v + noise_v)  # Prevent backward movement
             w_noisy = w + noise_w
 
-            # Guardar posición anterior antes de la actualización
+            # Save previous position before update
             prev_position = (x, y)
             
-
-            # Actualización de la posición (x, y)
+            # Update position (x, y)
             x_next = x + v_noisy * np.cos(theta) * self._dt
             y_next = y + v_noisy * np.sin(theta) * self._dt
 
@@ -152,14 +151,21 @@ class ParticleFilter:
 
             if not self._map.contains((x_next, y_next)):
 
-            # Corregir la posición si la partícula ha salido del entorno
+                # Correct position if particle left the environment
                 collision_point, _ = self._map.check_collision([prev_position, (x_next, y_next)])
 
-                if collision_point:  # Si hubo colisión, corregimos la posición
+                if collision_point:  # If there was a collision, correct the position
                     x_next, y_next = collision_point
                 
-
             particle[0], particle[1], particle[2] = x_next, y_next, theta
+
+    def _bin_index(self, particle):
+        x, y, theta = particle
+        x_bin = round(x, 1)
+        y_bin = round(y, 1)
+        theta_bin = round(theta, 1)
+
+        return (x_bin, y_bin, theta_bin)
 
     def resample(self, measurements: list[float]) -> None:
         """Samples a new set of particles.
@@ -171,23 +177,33 @@ class ParticleFilter:
         # TODO: 3.9. Complete the function body with your code (i.e., replace the pass statement).
         
         # Compute the weights of the particles
-        weights = np.array([self._measurement_probability(measurements, particle) for particle in self._particles])
-
-        # Normalize the weights
+        weights = np.array([self._measurement_probability(measurements, p) for p in self._particles])
         weights /= np.sum(weights)
 
-        # Sistematic resampling
         N = len(self._particles)
-
-        u1 = np.random.uniform(0, 1/N)
-
-        indexes = np.zeros(N, dtype=int)
+        u1 = np.random.uniform(0, 1 / N)
         cumulative_sum = np.cumsum(weights)
-        for k in range(1, N):
+
+        # Systematic resampling
+        indexes = np.zeros(N, dtype=int)
+        for k in range(1, N): 
             u = u1 + (k - 1) / N
             indexes[k - 1] = np.searchsorted(cumulative_sum, u)
 
-        self._particles = self._particles[indexes]
+        resampled = self._particles[indexes]
+
+        # Count unique bins (distinct hypotheses)
+        bins = set(self._bin_index(p) for p in resampled)
+        num_bins = len(bins)
+
+        # Simple policy: more bins ⇒ more particles
+        new_count = min(100 + 20 * num_bins, 1000)
+
+        # Update the number of particles with resampling
+        self._particles = resampled[np.random.choice(len(resampled), new_count, replace=True)]
+        self._particle_count = len(self._particles)
+
+        print(f"Iteration {self._iteration}: {num_bins} hypotheses, {self._particle_count} particles")
 
         
     def plot(self, axes, orientation: bool = True):
@@ -288,17 +304,14 @@ class ParticleFilter:
             
             particles = np.empty((particle_count, 3), dtype=object)
 
-            # Descomponer los límites del mapa
+            # Decompose the map limits
             min_x, min_y, max_x, max_y = self._map.bounds()
             
-
-            # Orientaciones válidas para las partículas
+            # Valid orientations for the particles
             valid_orientations = [0, np.pi/2, np.pi, 3*np.pi/2]
 
             valid_particles = 0
 
-            
-                            
             if global_localization:
                 while valid_particles < particle_count:
                     
@@ -335,12 +348,11 @@ class ParticleFilter:
 
         # TODO: 3.6. Complete the missing function body with your code.
         
-        rays = self._lidar_rays(particle, range(0, 240, 30))  # 8 uniformly spaced rays
+        rays = self.lidar_rays(particle, range(0, 240, 30), sensor_range_max= self._sensor_range_max)  # 8 uniformly spaced rays
         for ray in rays:
             intersection,  distance = self._map.check_collision(ray, True)
 
             if intersection:
-                
                 z_hat.append(distance)
             else:
                 z_hat.append(float("nan"))
@@ -361,14 +373,14 @@ class ParticleFilter:
 
         """
         # TODO: 3.7. Complete the function body (i.e., replace the code below).
-    
         return (1 / (sigma * np.sqrt(2 * np.pi))) * np.exp(-0.5 * ((x - mu) / sigma) ** 2)
 
 
-    
-    def _lidar_rays(
-        self, pose: tuple[float, float, float], indices: tuple[float], degree_increment: float = 1.5
-    ) -> list[list[tuple[float, float]]]:
+    @staticmethod
+    def lidar_rays(pose: tuple[float, float, float], 
+                indices: tuple[float], 
+                sensor_range_max: float, 
+                degree_increment: float = 1.5) -> list[list[tuple[float, float]]]:
         """Determines the simulated LiDAR ray segments for a given robot pose.
 
         Args:
@@ -392,8 +404,8 @@ class ParticleFilter:
 
         for index in indices:
             ray_angle = math.radians(degree_increment * index)
-            x_end = x_start + self._sensor_range_max * math.cos(theta + ray_angle)
-            y_end = y_start + self._sensor_range_max * math.sin(theta + ray_angle)
+            x_end = x_start + sensor_range_max * math.cos(theta + ray_angle)
+            y_end = y_start + sensor_range_max * math.sin(theta + ray_angle)
             rays.append([(x_start, y_start), (x_end, y_end)])
 
         return rays
@@ -418,17 +430,49 @@ class ParticleFilter:
         probability = 1.0
         predicted_measurements = self._sense(particle)
 
-
-        # Calcular la probabilidad para cada medida
+        # Calculate probability for each measurement
         for z_real, z_pred in zip(measurements[::30], predicted_measurements):
             
-            # Gestionar medidas fuera de rango (nan)
+            # Handle out-of-range measurements (nan)
             if math.isnan(z_real):
-                z_real = self._sensor_range_min  # Sustituir por el rango mínimo
+                z_real = self._sensor_range_min  # Replace with minimum range
             if math.isnan(z_pred):
-                z_pred = self._sensor_range_min  # Sustituir por el rango mínimo
+                z_pred = self._sensor_range_min  # Replace with minimum range
 
             prob = self._gaussian(z_real, self._sigma_z, z_pred)
             probability *= prob  
 
         return probability
+
+    def check_for_loss(self, measurements: list[float]) -> bool:
+        """Checks if the robot is lost based on the average likelihood of the particles.
+        If the average likelihood is too low, the robot is considered lost.
+
+        Args:
+            measurements: Sensor measurements [m].
+
+        Returns:
+            bool: True if the robot is lost, False otherwise.
+
+        """
+        
+        if len(self._particles) == 0:
+            return True
+
+        likelihoods = np.array([self._measurement_probability(measurements, p) for p in self._particles])
+        average_likelihood = np.mean(likelihoods)
+        print(f"Average likelihood: {average_likelihood}")
+        # Check if the average likelihood is below a threshold
+        return average_likelihood > 1000
+
+    def reset_particles(self):
+        """Reinitializes the particles to a random state.
+
+        """
+        # Reinitialize particles    
+        self._particles = self._init_particles(
+            self._initial_particle_count,
+            global_localization=True,
+            initial_pose=(float('nan'), float('nan'), float('nan')),
+            initial_pose_sigma=(float('nan'), float('nan'), float('nan'))
+        )

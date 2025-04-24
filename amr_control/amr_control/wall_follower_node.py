@@ -25,7 +25,7 @@ class WallFollowerNode(LifecycleNode):
 
         # Parameters
         self.declare_parameter("dt", 0.05)
-        self.declare_parameter("enable_localization", False)
+        self.declare_parameter("enable_localization", True)
         self._stop = False
 
     def on_configure(self, state: LifecycleState) -> TransitionCallbackReturn:
@@ -66,18 +66,21 @@ class WallFollowerNode(LifecycleNode):
             self._subscribers.append(
                 message_filters.Subscriber(self, LaserScan, "/scan", qos_profile = scan_profile)
             )
-            ts = message_filters.ApproximateTimeSynchronizer(
-                self._subscribers,
-                queue_size=10,  # tamaño de la cola
-                slop=9.0,  # tiempo máximo de espera,
-            )
-
-            ts.registerCallback(self._compute_commands_callback)
 
 
             # TODO: 4.12. Add /pose to the synced subscriptions only if localization is enabled.
-            
+            if enable_localization:
+                self._subscribers.append(
+                    message_filters.Subscriber(self, PoseStamped, "/pose")
+                )
 
+                
+            ts = message_filters.ApproximateTimeSynchronizer(
+                self._subscribers,
+                queue_size=10,
+                slop=9.0,
+            )
+            ts.registerCallback(self._compute_commands_callback)
 
 
             # Publishers
@@ -122,8 +125,9 @@ class WallFollowerNode(LifecycleNode):
 
         """
         self.get_logger().info("Received messages.")
-        if not pose_msg.localized:
 
+        if not pose_msg.localized:
+            self.get_logger().info("Received messages, but robot is not localized.")
             if not self._stop:
                 # 2.8. Parse the odometry from the Odometry message (i.e., read z_v and z_w).
                 z_v: float = odom_msg.twist.twist.linear.x
@@ -158,7 +162,7 @@ class WallFollowerNode(LifecycleNode):
         msg.angular.z = 1.0* w
         self._cmd_publisher.publish(msg)
 
-    def _stop_callback(self, msg: MoveFlag) -> None:    
+    def _stop_callback(self, msg: MoveFlag) -> None:  
         self._stop = not msg.move
 
 

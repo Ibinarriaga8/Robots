@@ -14,6 +14,7 @@ class PurePursuit:
         self._dt: float = dt
         self._lookahead_distance: float = lookahead_distance
         self._path: list[tuple[float, float]] = []
+        self._first_rotation: bool = True
 
     def compute_commands(self, x: float, y: float, theta: float) -> tuple[float, float]:
         """Pure pursuit controller implementation.
@@ -32,19 +33,23 @@ class PurePursuit:
         closest_xy, closest_idx = self._find_closest_point(x, y)
         target_xy, target_idx = self._find_target_point((x, y), closest_idx)
 
+
         # Compute the angle between the robot and the target point
         alpha = np.arctan2(target_xy[1] - y, target_xy[0] - x) - theta # alpha = beta - theta
-        # alpha = (alpha + np.pi) % (2 * np.pi) - np.pi
-        v = 0.05 # constant
-        w = 2 * v * np.sin(alpha) / self._lookahead_distance
+        alpha = (alpha + np.pi) % (2 * np.pi) - np.pi # Normalize angle to [-pi, pi]
 
-        # If the robot is not reasonably aligned with the path, rotate in place
-        # if (alpha > np.pi / 6) and alpha < (2 * np.pi - np.pi / 6):  # Threshold angle (30 degrees)
-        #     v = 0.0  # No linear velocity
-        #     w = 2.0 * alpha  # Proportional angular velocity
-        # else:
-        #     v = self._lookahead_distance * np.cos(alpha) # if perfectly aligned, go straight
-        #     w = (2 * v * np.sin(alpha)) / self._lookahead_distance # w = 2 * v * sin(alpha) / L
+
+        # Comprobación de alineamiento
+        if abs(alpha) > np.pi / 4 and self._first_rotation:
+            print("Rotating in place")
+            v = 0.0
+            w = 1.0 if alpha > 0 else -1.0
+
+        else:
+            self._first_rotation = False
+            v = 0.2
+            w = 2 * v * np.sin(alpha) / self._lookahead_distance
+
         
         return v, w
 
